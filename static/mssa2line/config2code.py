@@ -58,29 +58,9 @@ class Config2Code():
                 if lines[0] <= line <= lines[1]:
                     configs.add(config)
                     continue
+        if len(configs) == 0:
+            return None
         return configs
-        
-    
-    def code_to_config(self, src, line, config_codeblock_data=None):
-        # 该代码已废弃，可暂时不看
-        # 寻找一行代码对应的配置项
-        # 如果没有返回None
-        if config_codeblock_data is None:
-            config_codeblock = self.config_codeblock
-        else:
-            config_codeblock = config_codeblock_data
-        for config, data in config_codeblock.items():
-            for config_src, config_ranges in data.items():
-                config_src = config_src.replace(self.kernel_dir, "")
-                if config_src != src:
-                    continue
-                # FIXME: 有没有可能一个代码对应多个配置项？
-                if [0, 0] in config_ranges:
-                    return config
-                for config_range in config_ranges:
-                    if config_range[0] <= line <= config_range[1]:
-                        return config
-        return None
     
     def config2code(self, config):
         # 根据配置项获取对应的代码块

@@ -1,0 +1,96 @@
+# 主流程
+def main()
+    # 先读必要的文件
+    bcs_index = read("bcs_index.json")
+    index_config = read("index_config.json")
+    configs = index_config.values().aggregate()
+    for config in configs:
+        analysis(config)
+
+# 分析主流程
+def analysis(config):
+    # 初始化队列
+    q = Queue()
+    # 当前配置项入队
+    q.enqueue(config)
+    # 配置项的子配置项入队（需要config2code模块的协助，下同）
+    for child in config.children:
+        q.enqueue(child)
+    # 配置项的父配置项入队
+    for parent in config.parents:
+        q.enqueue(parent)
+    # 获取所有待分析的读指令集合
+    read_insts, write_insts = analyze_bcs(bcs)
+    for read_inst in read_insts:
+        # 获取读取同一地址的写指令集合
+        var = get_variables(read_inst)
+        # 1、先分析当前配置项本身所在的源码，这个逻辑和其它配置项不太一样
+        write_insts_for_analysis = write_insts.get(var)
+        # 都要
+        for write_inst in write_insts_for_analysis:
+            if has_relationships(read_inst, write_inst):
+                ans.append((read_inst, write_inst))
+        q.dequeue()
+
+        # 2、然后再分析其他配置项所管辖的代码
+        # 这个read_configs列表从开始到后面，管辖的配置项范围越来越大
+        read_configs = get_configs(read_inst)
+        if read_configs == None:
+            # 如果读指令不被任何配置项管辖，则在配置项外搜索
+            ans.append(out_config_analysis(read_inst, write_insts, var))
+        else:        
+            # 开始分析
+            ans = in_config_analysis(read_inst,
+                                    read_configs,
+                                    write_insts_for_analysis,
+                                    q)
+        # 如果还没找到，就在配置项外搜索
+        if ans == None:
+            ans = out_config_analysis(read_inst, write_insts, var)
+
+def in_config_analysis(read_inst, read_configs, write_insts, q):
+    ans = []
+    var = get_variables(read_inst)
+    # 直到队列为空
+    while not q.is_empty():
+        c = q.dequeue()
+        index = index_config.get_index(c)
+        # 配置项管辖的代码所在的源码文件的集合，这里可能还涵盖了一些不被源码包裹的其它源码
+        bcs = bcs_index.get(index)
+        # 把源码文件里所有的读写指令都分析出来
+        # 指令是analysis里的Instruction类，包括类型，地址，源码行号和所属配置项等信息
+        _, write_insts = analyze_bcs(bcs)
+        # 把读写地址相同的筛选出来
+        write_insts_for_analysis = write_insts.get(var)
+        for write_inst in write_insts_for_analysis:
+            # 因为此时就算某条写语句不被同一配置项或相关配置项所管辖，但他们读写的是同一个地址，因此也可以认为它们有可能构成依赖关系。保证不会比HFL找的数量差太多
+            if has_relationships(read_configs, write_configs):
+                ans.append((read_inst, write_inst))
+    return ans
+
+# 配置项外搜索
+def out_config_analysis(read_inst, write_insts, var):
+    ans = []
+    write_lists = [[0], [0]]
+    # 在附近找到一个被配置项管辖且已找到的依赖对
+    # 读指令要在待搜索读指令的附近
+    dep_pairs = get_near_pair(read_inst)
+    # 在这依赖对附近找依赖
+    for dep_pair in dep_pairs:
+        dep_read_inst, dep_write_inst = dep_pair[0], dep_pair[1]
+        # 先在写指令附近找
+        write_src = get_src(dep_write_inst)
+        minimal_bcs = get_minimal_bcs(write_src)
+        _, write_insts = analyze_bcs(bcs)
+        write_lists[0] = write_insts.get(var)
+        # 再在读指令附近找
+        read_src = get_src(dep_read_inst)
+        minimal_bcs = get_minimal_bcs(read_src)
+        _, write_insts = analyze_bcs(bcs)
+        write_lists[1] = write_insts.get(var)
+        for write_list in write_lists:
+            for write_inst in write_list:
+                if has_relationships(read_configs, write_configs):
+                    ans.append((read_inst, write_inst))
+
+    # （待考虑）找到后，如果它被配置项管辖则考虑修复配置项关系
