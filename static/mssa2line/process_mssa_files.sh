@@ -4,7 +4,7 @@
 input_dir="/home/jiakai/KConfigFuzz/static/bc2mssa/output"
 config_codeblock="/home/jiakai/KConfigFuzz/config/config_codeblock.json"
 config_tree="/home/jiakai/KConfigFuzz/config/config_tree.json"
-script="python get_aliased_pair_in_config_new.py"
+script="python3 get_dep_pairs.py"
 
 # 检查输入目录是否存在
 if [ ! -d "$input_dir" ]; then
